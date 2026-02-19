@@ -1,0 +1,264 @@
+@page "/Departamentos"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Departamentos
+@using CT.Domain.Enums
+@using CT.Domain.Exceptions
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+@inject DepartamentoCambiarEstadoUseCase CambiarEstadoUseCase
+
+<PageTitle>Departamentos — CT</PageTitle>
+
+<div class="page-header">
+    <h1>Departamentos</h1>
+    <button class="btn btn-primary" @onclick="MostrarFormCrear">+ Nuevo Departamento</button>
+</div>
+
+<div class="alert alert-warning">
+    <strong>Atención:</strong> Esta información es fija. Los departamentos no cambian. Solo modifique el estado si es
+    estrictamente necesario (ej: mantenimiento).
+</div>
+
+@if (!string.IsNullOrEmpty(_mensaje))
+{
+    <div class="alert @(_esError ? "alert-danger" : "alert-success")">@_mensaje</div>
+}
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <div class="table-scroll">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
+                    <th>Capacidad</th>
+                    <th>Precio/Noche</th>
+                    <th>Estado</th>
+                    <th>Observaciones</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var d in _departamentos)
+                {
+                    <tr>
+                        <td><strong>@d.Nombre</strong></td>
+                        <td>@(d.Descripcion ?? "—")</td>
+                        <td>@d.CapacidadMaxima</td>
+                        <td>$@d.PrecioPorNoche.ToString("N0")</td>
+                        <td>
+                            <span class="badge @ObtenerClaseEstadoDepto(d.Estado)">@d.Estado</span>
+                        </td>
+                        <td>@(d.Observaciones ?? "—")</td>
+                        <td>
+                            @if (d.Estado == EstadoDepartamento.Activo)
+                            {
+                                <button class="btn btn-sm btn-warning"
+                                        @onclick="() => CambiarEstado(d.DepartamentoId, EstadoDepartamento.Mantenimiento)">
+                                    Mantenimiento
+                                </button>
+                            }
+                            else if (d.Estado == EstadoDepartamento.Mantenimiento)
+                            {
+                                <button class="btn btn-sm btn-success"
+                                        @onclick="() => CambiarEstado(d.DepartamentoId, EstadoDepartamento.Activo)">
+                                    Activar
+                                </button>
+                            }
+                            else if (d.Estado == EstadoDepartamento.Inactivo)
+                            {
+                                <button class="btn btn-sm btn-success"
+                                        @onclick="() => CambiarEstado(d.DepartamentoId, EstadoDepartamento.Activo)">
+                                    Reactivar
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@* Modal crear departamento *@
+@if (_mostrarFormCrear)
+{
+    <div class="modal-backdrop" @onclick="() => _mostrarFormCrear = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">Nuevo Departamento</div>
+
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" class="form-control" @bind="_nuevoNombre" placeholder="Ej: Departamento 1" />
+            </div>
+            <div class="form-group">
+                <label>Descripción</label>
+                <input type="text" class="form-control" @bind="_nuevoDescripcion" />
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Capacidad Máx. *</label>
+                    <input type="number" class="form-control" min="1" @bind="_nuevoCapacidad" />
+                </div>
+                <div class="form-group">
+                    <label>Precio/Noche *</label>
+                    <input type="number" class="form-control" min="0" step="0.01" @bind="_nuevoPrecio" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Observaciones</label>
+                <textarea class="form-control" rows="2" @bind="_nuevoObservaciones"></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" @onclick="() => _mostrarFormCrear = false">Cancelar</button>
+                <button class="btn btn-primary" @onclick="CrearDepartamento" disabled="@_guardando">
+                    @(_guardando ? "Guardando..." : "Crear")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal de confirmación de estado *@
+@if (_mostrarModal)
+{
+    <div class="modal-backdrop" @onclick="() => _mostrarModal = false">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">Confirmar cambio de estado</div>
+            <p>¿Cambiar el estado del departamento a <strong>@_nuevoEstado</strong>?</p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" @onclick="() => _mostrarModal = false">Cancelar</button>
+                <button class="btn btn-primary" @onclick="ConfirmarCambioEstado" disabled="@_guardando">
+                    @(_guardando ? "Guardando..." : "Confirmar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Inject] private DepartamentoListarUseCase ListarUseCase { get; set; } = default!;
+    [Inject] private DepartamentoAltaUseCase AltaUseCase { get; set; } = default!;
+
+    private List<DepartamentoDto> _departamentos = [];
+    private bool _cargando = true;
+    private string? _mensaje;
+    private bool _esError;
+    private bool _guardando;
+
+    // Modal crear
+    private bool _mostrarFormCrear;
+    private string _nuevoNombre = string.Empty;
+    private string? _nuevoDescripcion;
+    private int _nuevoCapacidad = 2;
+    private decimal _nuevoPrecio;
+    private string? _nuevoObservaciones;
+
+    // Modal estado
+    private bool _mostrarModal;
+    private int _deptoIdCambio;
+    private EstadoDepartamento _nuevoEstado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _departamentos = await ListarUseCase.EjecutarAsync();
+        _cargando = false;
+    }
+
+    private void MostrarFormCrear()
+    {
+        _nuevoNombre = string.Empty;
+        _nuevoDescripcion = null;
+        _nuevoCapacidad = 2;
+        _nuevoPrecio = 0;
+        _nuevoObservaciones = null;
+        _mostrarFormCrear = true;
+    }
+
+    private async Task CrearDepartamento()
+    {
+        _guardando = true;
+        _mensaje = null;
+        try
+        {
+            var dto = new CrearDepartamentoDto
+            {
+                Nombre = _nuevoNombre,
+                Descripcion = _nuevoDescripcion,
+                CapacidadMaxima = _nuevoCapacidad,
+                PrecioPorNoche = _nuevoPrecio,
+                Observaciones = _nuevoObservaciones
+            };
+            await AltaUseCase.EjecutarAsync(dto);
+            _departamentos = await ListarUseCase.EjecutarAsync();
+            _mensaje = $"Departamento '{_nuevoNombre}' creado.";
+            _esError = false;
+            _mostrarFormCrear = false;
+        }
+        catch (ValidationException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (Exception)
+        {
+            _mensaje = "Error al crear el departamento.";
+            _esError = true;
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private void CambiarEstado(int deptoId, EstadoDepartamento nuevoEstado)
+    {
+        _deptoIdCambio = deptoId;
+        _nuevoEstado = nuevoEstado;
+        _mostrarModal = true;
+    }
+
+    private async Task ConfirmarCambioEstado()
+    {
+        _guardando = true;
+        _mensaje = null;
+
+        try
+        {
+            await CambiarEstadoUseCase.EjecutarAsync(_deptoIdCambio, _nuevoEstado);
+
+            _departamentos = await ListarUseCase.EjecutarAsync();
+            _mensaje = $"Estado actualizado a {_nuevoEstado}.";
+            _esError = false;
+        }
+        catch (DomainInvalidOperationException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (Exception)
+        {
+            _mensaje = "Error al cambiar el estado.";
+            _esError = true;
+        }
+        finally
+        {
+            _guardando = false;
+            _mostrarModal = false;
+        }
+    }
+
+    private static string ObtenerClaseEstadoDepto(EstadoDepartamento estado) => estado switch
+    {
+        EstadoDepartamento.Activo => "badge-confirmada",
+        EstadoDepartamento.Mantenimiento => "badge-pendiente",
+        EstadoDepartamento.Inactivo => "badge-cancelada",
+        _ => ""
+    };
+}

@@ -1,0 +1,317 @@
+@page "/Reservas/Crear"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Clientes
+@using CT.Application.UseCases.Reservas
+@using CT.Domain.Enums
+@using CT.Domain.Exceptions
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Crear Reserva — CT</PageTitle>
+
+<div class="page-header">
+    <h1>Crear Reserva</h1>
+</div>
+
+@if (!string.IsNullOrEmpty(_mensaje))
+{
+    <div class="alert @(_esError ? "alert-danger" : "alert-success")">@_mensaje</div>
+}
+
+<div class="crear-reserva-layout">
+    @* === IZQUIERDA: Form de Reserva === *@
+    <div class="card">
+        <h3>Datos de la Reserva</h3>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Fecha Inicio</label>
+                <input type="date" class="form-control" @bind="_dto.FechaInicio" @bind:event="oninput"
+                       @onchange="OnFechasChanged" />
+            </div>
+            <div class="form-group">
+                <label>Fecha Fin</label>
+                <input type="date" class="form-control" @bind="_dto.FechaFin" @bind:event="oninput"
+                       @onchange="OnFechasChanged" />
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Departamento</label>
+            @if (_consultandoDisponibilidad)
+            {
+                <p class="text-muted">Consultando disponibilidad...</p>
+            }
+            else if (_disponibilidad.Count > 0)
+            {
+                <select class="form-control" @bind="_dto.DepartamentoId">
+                    <option value="0">— Seleccione —</option>
+                    @foreach (var d in _disponibilidad.Where(d => d.EstaDisponible))
+                    {
+                        <option value="@d.DepartamentoId">@d.DepartamentoNombre — $@d.PrecioPorNoche/noche (máx
+                            @d.CapacidadMaxima) — Est. $@d.MontoEstimado</option>
+                        }
+                    </select>
+                    @if (_disponibilidad.All(d => !d.EstaDisponible))
+                    {
+                        <small class="text-muted">No hay departamentos disponibles en esas fechas.</small>
+                    }
+                }
+            else
+                {
+                    <small class="text-muted">Seleccione fechas para ver disponibilidad.</small>
+                }
+            </div>
+
+            <div class="form-group">
+                <label>Cantidad de Huéspedes</label>
+                <input type="number" class="form-control" min="1" @bind="_dto.CantidadHuespedes" />
+            </div>
+
+            <div class="form-group">
+                <label>Origen de Reserva</label>
+                <select class="form-control" @bind="_dto.OrigenReserva">
+                    @foreach (var origen in Enum.GetValues<OrigenReserva>())
+                    {
+                        <option value="@origen">@origen</option>
+                    }
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Observaciones</label>
+                <textarea class="form-control" rows="3" @bind="_dto.Observaciones"></textarea>
+            </div>
+
+            <hr />
+            <h4>Cliente</h4>
+            <div class="form-row">
+                <div class="form-group" style="flex:2">
+                    <label>DNI del Cliente</label>
+                    <input type="text" class="form-control" @bind="_dniBusqueda"
+                           placeholder="Ingrese DNI y presione Buscar" />
+                </div>
+                <div class="form-group" style="flex:1; align-self:flex-end">
+                    <button class="btn btn-secondary" @onclick="BuscarCliente" disabled="@_buscandoCliente">
+                        @(_buscandoCliente ? "Buscando..." : "Buscar")
+                    </button>
+                </div>
+            </div>
+
+            @if (_clienteEncontrado != null)
+            {
+                <div class="alert alert-success">
+                    Cliente encontrado: <strong>@_clienteEncontrado.Nombre @_clienteEncontrado.Apellido</strong> (DNI:
+                    @_clienteEncontrado.DNI)
+                </div>
+            }
+            else if (_clienteBuscado && _clienteEncontrado == null)
+            {
+                <div class="alert alert-warning">
+                    Cliente no encontrado. Complete los datos del nuevo cliente a la derecha.
+                </div>
+            }
+
+            <button class="btn btn-primary btn-block" @onclick="GuardarReserva" disabled="@_guardando">
+                @(_guardando ? "Creando..." : "Crear Reserva")
+            </button>
+        </div>
+
+        @* === DERECHA: Form de Cliente nuevo (condicional) === *@
+        @if (_clienteBuscado && _clienteEncontrado == null)
+        {
+            <div class="card">
+                <h3>Nuevo Cliente</h3>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nombre *</label>
+                        <input type="text" class="form-control" @bind="_nuevoCliente.Nombre" />
+                    </div>
+                    <div class="form-group">
+                        <label>Apellido *</label>
+                        <input type="text" class="form-control" @bind="_nuevoCliente.Apellido" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>DNI</label>
+                    <input type="text" class="form-control" value="@_dniBusqueda" disabled />
+                </div>
+
+                <div class="form-group">
+                    <label>Teléfono</label>
+                    <input type="text" class="form-control" @bind="_nuevoCliente.Telefono" />
+                </div>
+
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" class="form-control" @bind="_nuevoCliente.Email" />
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Ciudad</label>
+                        <input type="text" class="form-control" @bind="_nuevoCliente.Ciudad" />
+                    </div>
+                    <div class="form-group">
+                        <label>Provincia</label>
+                        <input type="text" class="form-control" @bind="_nuevoCliente.Provincia" />
+                    </div>
+                    <div class="form-group">
+                        <label>País</label>
+                        <input type="text" class="form-control" @bind="_nuevoCliente.Pais" />
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Observaciones</label>
+                    <textarea class="form-control" rows="2" @bind="_nuevoCliente.Observaciones"></textarea>
+                </div>
+            </div>
+        }
+    </div>
+
+@code {
+    [Inject] private ClienteBuscarPorDniUseCase BuscarPorDniUseCase { get; set; } = default!;
+    [Inject] private ClienteAltaUseCase AltaClienteUseCase { get; set; } = default!;
+    [Inject] private ReservaAltaUseCase AltaReservaUseCase { get; set; } = default!;
+    [Inject] private ConsultarDisponibilidadUseCase DisponibilidadUseCase { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private CrearReservaDto _dto = new()
+    {
+        FechaInicio = DateTime.Today.AddDays(1),
+        FechaFin = DateTime.Today.AddDays(2),
+        CantidadHuespedes = 1,
+        OrigenReserva = OrigenReserva.WhatsApp
+    };
+
+    private CrearClienteDto _nuevoCliente = new();
+    private string _dniBusqueda = string.Empty;
+    private ClienteDto? _clienteEncontrado;
+    private bool _clienteBuscado;
+    private bool _buscandoCliente;
+    private bool _guardando;
+    private bool _consultandoDisponibilidad;
+    private string? _mensaje;
+    private bool _esError;
+    private List<DisponibilidadDto> _disponibilidad = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ConsultarDisponibilidad();
+    }
+
+    private async Task OnFechasChanged()
+    {
+        await ConsultarDisponibilidad();
+    }
+
+    private async Task ConsultarDisponibilidad()
+    {
+        if (_dto.FechaInicio >= _dto.FechaFin)
+            return;
+
+        _consultandoDisponibilidad = true;
+        try
+        {
+            _disponibilidad = await DisponibilidadUseCase.EjecutarAsync(
+                _dto.FechaInicio, _dto.FechaFin, _dto.CantidadHuespedes);
+        }
+        catch
+        {
+            _disponibilidad = [];
+        }
+        finally
+        {
+            _consultandoDisponibilidad = false;
+        }
+    }
+
+    private async Task BuscarCliente()
+    {
+        if (string.IsNullOrWhiteSpace(_dniBusqueda)) return;
+
+        _buscandoCliente = true;
+        _clienteEncontrado = await BuscarPorDniUseCase.EjecutarAsync(_dniBusqueda.Trim());
+        _clienteBuscado = true;
+
+        if (_clienteEncontrado == null)
+        {
+            _nuevoCliente = new CrearClienteDto { DNI = _dniBusqueda.Trim() };
+        }
+
+        _buscandoCliente = false;
+    }
+
+    private async Task GuardarReserva()
+    {
+        _mensaje = null;
+        _guardando = true;
+
+        try
+        {
+            // Si hay cliente nuevo, crearlo primero
+            if (_clienteEncontrado == null && _clienteBuscado)
+            {
+                _nuevoCliente.DNI = _dniBusqueda.Trim();
+                await AltaClienteUseCase.EjecutarAsync(_nuevoCliente);
+
+                // Buscar el cliente recién creado para obtener su ID
+                _clienteEncontrado = await BuscarPorDniUseCase.EjecutarAsync(_dniBusqueda.Trim());
+            }
+
+            if (_clienteEncontrado == null)
+            {
+                _mensaje = "Debe buscar un cliente por DNI antes de crear la reserva.";
+                _esError = true;
+                _guardando = false;
+                return;
+            }
+
+            _dto.ClienteId = _clienteEncontrado.ClienteId;
+            await AltaReservaUseCase.EjecutarAsync(_dto);
+
+            _mensaje = "Reserva creada exitosamente.";
+            _esError = false;
+
+            await Task.Delay(1000);
+            Navigation.NavigateTo("/Reservas/Gestion");
+        }
+        catch (ValidationException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (DepartamentoNoDisponibleException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (ReservaSuperpuestaException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (CapacidadExcedidaException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (EntityNotFoundException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (Exception)
+        {
+            _mensaje = "Ocurrió un error inesperado.";
+            _esError = true;
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+}

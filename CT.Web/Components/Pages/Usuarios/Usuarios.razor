@@ -1,0 +1,202 @@
+@page "/Usuarios"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Users
+@using CT.Domain.Exceptions
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Usuarios — CT</PageTitle>
+
+<div class="page-header">
+    <h1>Gestión de Usuarios</h1>
+    <button class="btn btn-primary" @onclick="MostrarFormCrear">+ Nuevo Usuario</button>
+</div>
+
+@if (!string.IsNullOrEmpty(_mensaje))
+{
+    <div class="alert @(_esError ? "alert-danger" : "alert-success")">@_mensaje</div>
+}
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <div class="table-scroll">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Apellido</th>
+                    <th>Email</th>
+                    <th>Restablecer Pass</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in _usuarios)
+                {
+                    <tr>
+                        <td>@u.Nombre</td>
+                        <td>@u.Apellido</td>
+                        <td>@u.Email</td>
+                        <td>
+                            @if (u.DebeRestablecerPassword)
+                            {
+                                <span class="badge badge-pendiente">Pendiente</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-secondary" @onclick="() => MostrarFormEditar(u)">Editar</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@* Modal crear/editar *@
+@if (_mostrarForm)
+{
+    <div class="modal-backdrop" @onclick="CerrarForm">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">@(_editando ? "Editar Usuario" : "Nuevo Usuario")</div>
+
+            <div class="form-group">
+                <label>Nombre</label>
+                <input type="text" class="form-control" @bind="_formNombre" />
+            </div>
+            <div class="form-group">
+                <label>Apellido</label>
+                <input type="text" class="form-control" @bind="_formApellido" />
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" class="form-control" @bind="_formEmail" />
+            </div>
+            @if (!_editando)
+            {
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <input type="password" class="form-control" @bind="_formPassword" />
+                    <small class="text-muted">Mínimo 8 caracteres, una mayúscula y un número.</small>
+                </div>
+            }
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" @onclick="CerrarForm">Cancelar</button>
+                <button class="btn btn-primary" @onclick="Guardar" disabled="@_guardando">
+                    @(_guardando ? "Guardando..." : "Guardar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Inject] private UserListarUseCase ListarUseCase { get; set; } = default!;
+    [Inject] private UserCrearUseCase CrearUseCase { get; set; } = default!;
+    [Inject] private UserModificarUseCase ModificarUseCase { get; set; } = default!;
+
+    private List<UserDto> _usuarios = [];
+    private bool _cargando = true;
+    private string? _mensaje;
+    private bool _esError;
+    private bool _guardando;
+
+    // Form
+    private bool _mostrarForm;
+    private bool _editando;
+    private int _editarId;
+    private string _formNombre = string.Empty;
+    private string _formApellido = string.Empty;
+    private string _formEmail = string.Empty;
+    private string _formPassword = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        _cargando = true;
+        _usuarios = await ListarUseCase.EjecutarAsync();
+        _cargando = false;
+    }
+
+    private void MostrarFormCrear()
+    {
+        _editando = false;
+        _formNombre = string.Empty;
+        _formApellido = string.Empty;
+        _formEmail = string.Empty;
+        _formPassword = string.Empty;
+        _mostrarForm = true;
+    }
+
+    private void MostrarFormEditar(UserDto user)
+    {
+        _editando = true;
+        _editarId = user.Id;
+        _formNombre = user.Nombre;
+        _formApellido = user.Apellido;
+        _formEmail = user.Email;
+        _formPassword = string.Empty;
+        _mostrarForm = true;
+    }
+
+    private void CerrarForm() => _mostrarForm = false;
+
+    private async Task Guardar()
+    {
+        _guardando = true;
+        _mensaje = null;
+
+        try
+        {
+            if (_editando)
+            {
+                var dto = new ModificarUserDto
+                {
+                    UserId = _editarId,
+                    Nombre = _formNombre,
+                    Apellido = _formApellido,
+                    Email = _formEmail
+                };
+                await ModificarUseCase.EjecutarAsync(dto);
+                _mensaje = "Usuario actualizado.";
+            }
+            else
+            {
+                var dto = new CrearUserDto(_formNombre, _formApellido, _formEmail, _formPassword);
+                await CrearUseCase.EjecutarAsync(dto);
+                _mensaje = "Usuario creado.";
+            }
+
+            _esError = false;
+            _mostrarForm = false;
+            await Cargar();
+        }
+        catch (ValidationException ex)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (Exception)
+        {
+            _mensaje = "Error inesperado.";
+            _esError = true;
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+}

@@ -1,0 +1,101 @@
+﻿@page "/"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Departamentos
+@using CT.Application.UseCases.Pagos
+@using CT.Application.UseCases.Reservas
+@using CT.Domain.Enums
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Home — CT</PageTitle>
+
+<div class="page-header">
+    <h1>Panel de Control</h1>
+</div>
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <div class="cards-row">
+        <div class="card">
+            <div class="card-header">Ocupación Actual</div>
+            <div class="card-value">@_porcentajeOcupacion%</div>
+            <div class="text-muted">@_deptosOcupados de @_totalDeptos departamentos</div>
+        </div>
+        <div class="card">
+            <div class="card-header">Check-ins Hoy</div>
+            <div class="card-value">@_checkIns.Count</div>
+            @foreach (var ci in _checkIns.Take(3))
+            {
+                <div class="text-muted">@ci.ClienteNombreCompleto — @ci.DepartamentoNombre</div>
+            }
+        </div>
+        <div class="card">
+            <div class="card-header">Recaudado este mes</div>
+            <div class="card-value">$@_recaudadoMes.ToString("N0")</div>
+            <div class="text-muted">@DateTime.Today.ToString("MMMM yyyy")</div>
+        </div>
+    </div>
+
+    <CalendarioTrimestral        Departamentos="_departamentos"        Reservas="_calendarioReservas"        OnReservaClick="IrAReserva" />
+}
+
+@code {
+    [Inject] private DepartamentoListarUseCase ListarDeptos { get; set; } = default!;
+    [Inject] private ObtenerCalendarioOcupacionUseCase CalendarioUseCase { get; set; } = default!;
+    [Inject] private ReservaListarCheckInHoyUseCase CheckInsUseCase { get; set; } = default!;
+    [Inject] private PagoObtenerReporteCajaUseCase ReporteCajaUseCase { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private bool _cargando = true;
+    private List<DepartamentoDto> _departamentos = [];
+    private List<CalendarioOcupacionDto> _calendarioReservas = [];
+    private List<ReservaResumenDto> _checkIns = [];
+    private decimal _recaudadoMes;
+    private int _porcentajeOcupacion;
+    private int _deptosOcupados;
+    private int _totalDeptos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hoy = DateTime.Today;
+        var inicioMes = new DateTime(hoy.Year, hoy.Month, 1);
+        var finTrimestre = inicioMes.AddMonths(3);
+        var finMes = inicioMes.AddMonths(1);
+
+        var deptosTask = ListarDeptos.EjecutarAsync();
+        var calendarioTask = CalendarioUseCase.EjecutarAsync(inicioMes, finTrimestre);
+        var checkInsTask = CheckInsUseCase.EjecutarAsync();
+        var cajaTask = ReporteCajaUseCase.EjecutarAsync(inicioMes, finMes);
+
+        await Task.WhenAll(deptosTask, calendarioTask, checkInsTask, cajaTask);
+
+        _departamentos = await deptosTask;
+        _calendarioReservas = await calendarioTask;
+        _checkIns = await checkInsTask;
+
+        var pagos = await cajaTask;
+        _recaudadoMes = pagos.Sum(p => p.Monto);
+
+        // Calcular ocupación: deptos con reserva activa hoy
+        _totalDeptos = _departamentos.Count;
+        _deptosOcupados = _calendarioReservas
+            .Where(r => r.Estado is EstadoReserva.Confirmada or EstadoReserva.Pendiente)
+            .Where(r => r.FechaInicio.Date <= hoy && r.FechaFin.Date > hoy)
+            .Select(r => r.DepartamentoId)
+            .Distinct()
+            .Count();
+
+        _porcentajeOcupacion = _totalDeptos > 0 ? (int)Math.Round(100.0 * _deptosOcupados / _totalDeptos) : 0;
+
+        _cargando = false;
+    }
+
+    private void IrAReserva(int reservaId)
+    {
+        Navigation.NavigateTo($"/Reservas/Gestion/{reservaId}");
+    }
+}

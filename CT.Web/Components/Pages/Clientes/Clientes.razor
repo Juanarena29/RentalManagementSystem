@@ -1,0 +1,131 @@
+@page "/Clientes"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Clientes
+@using CT.Domain.Exceptions
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Clientes — CT</PageTitle>
+
+<div class="page-header">
+    <h1>Clientes</h1>
+</div>
+
+<div class="card" style="margin-bottom:1.5rem">
+    <div class="form-row">
+        <div class="form-group" style="flex:3">
+            <input type="text" class="form-control" placeholder="Buscar por nombre, apellido o DNI..."
+                   @bind="_textoBusqueda" @onkeydown="OnKeyDown" />
+        </div>
+        <div class="form-group" style="flex:0; align-self:flex-end">
+            <button class="btn btn-primary" @onclick="Buscar">Buscar</button>
+        </div>
+        <div class="form-group" style="flex:0; align-self:flex-end">
+            <button class="btn btn-secondary" @onclick="CargarTodos">Ver Todos</button>
+        </div>
+    </div>
+</div>
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else if (!string.IsNullOrEmpty(_mensaje))
+{
+    <div class="alert alert-info">@_mensaje</div>
+}
+else
+{
+    <div class="table-scroll">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Apellido</th>
+                    <th>DNI</th>
+                    <th>Teléfono</th>
+                    <th>Email</th>
+                    <th>Ciudad</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in _clientes)
+                {
+                    <tr>
+                        <td>@c.Nombre</td>
+                        <td>@c.Apellido</td>
+                        <td>@c.DNI</td>
+                        <td>@(c.Telefono ?? "—")</td>
+                        <td>@(c.Email ?? "—")</td>
+                        <td>@(c.Ciudad ?? "—")</td>
+                        <td><a href="/Clientes/@c.ClienteId" class="btn btn-sm btn-secondary">Ver</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (_clientes.Count == 0)
+    {
+        <p class="text-muted" style="margin-top:1rem">No se encontraron clientes.</p>
+    }
+}
+
+@code {
+    [Inject] private ClienteListarUseCase ListarUseCase { get; set; } = default!;
+    [Inject] private ClienteBuscarUseCase BuscarUseCase { get; set; } = default!;
+
+    private List<ClienteDto> _clientes = [];
+    private string _textoBusqueda = string.Empty;
+    private bool _cargando = true;
+    private string? _mensaje;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarTodos();
+    }
+
+    private async Task CargarTodos()
+    {
+        _cargando = true;
+        _mensaje = null;
+        _textoBusqueda = string.Empty;
+        _clientes = await ListarUseCase.EjecutarAsync();
+        _cargando = false;
+    }
+
+    private async Task Buscar()
+    {
+        if (string.IsNullOrWhiteSpace(_textoBusqueda))
+        {
+            await CargarTodos();
+            return;
+        }
+
+        _cargando = true;
+        _mensaje = null;
+
+        try
+        {
+            _clientes = await BuscarUseCase.EjecutarAsync(_textoBusqueda.Trim());
+            if (_clientes.Count == 0)
+                _mensaje = $"No se encontraron clientes para '{_textoBusqueda}'.";
+        }
+        catch (ValidationException ex)
+        {
+            _mensaje = ex.Message;
+            _clientes = [];
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task OnKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Buscar();
+    }
+}

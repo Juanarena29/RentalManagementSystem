@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\CT.Domain\CT.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="UseCases\" />
+    <Folder Include="UseCases\Clientes\" />
+    <Folder Include="UseCases\Departamentos\" />
+    <Folder Include="UseCases\Pagos\" />
+    <Folder Include="UseCases\Reservas\" />
+    <Folder Include="UseCases\Utils\" />
+    <Folder Include="DTOs\" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

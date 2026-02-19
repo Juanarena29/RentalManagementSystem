@@ -1,0 +1,149 @@
+@page "/Pagos"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Pagos
+@using CT.Domain.Enums
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Pagos — CT</PageTitle>
+
+<div class="page-header">
+    <h1>Pagos</h1>
+</div>
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    @* === Widgets de resumen === *@
+    <div class="cards-row">
+        <div class="card">
+            <div class="card-header">Pagos este mes</div>
+            <div class="card-value">@_cantidadPagosMes</div>
+            <div class="text-muted">@DateTime.Today.ToString("MMMM yyyy")</div>
+        </div>
+        <div class="card">
+            <div class="card-header">Recaudado este mes</div>
+            <div class="card-value">$@_recaudadoMes.ToString("N0")</div>
+        </div>
+        <div class="card">
+            <div class="card-header">Reservas con saldo pendiente</div>
+            <div class="card-value" style="color:#dc2626">@_reservasPendientes.Count</div>
+            <div class="text-muted">$@_totalPendiente.ToString("N0") pendiente</div>
+        </div>
+    </div>
+
+    @* === Reservas con saldo pendiente === *@
+    @if (_reservasPendientes.Count > 0)
+    {
+        <div class="card" style="margin-bottom:1.5rem">
+            <h3>Reservas con Saldo Pendiente</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Reserva</th>
+                        <th>Cliente</th>
+                        <th>Teléfono</th>
+                        <th>Depto</th>
+                        <th>Check-in</th>
+                        <th>Total</th>
+                        <th>Pagado</th>
+                        <th>Pendiente</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _reservasPendientes)
+                    {
+                        <tr>
+                            <td>#@r.ReservaId</td>
+                            <td>@r.ClienteNombreCompleto</td>
+                            <td>@(r.ClienteTelefono ?? "—")</td>
+                            <td>@r.DepartamentoNombre</td>
+                            <td>@r.FechaInicio.ToString("dd/MM/yyyy")</td>
+                            <td>$@r.MontoTotal.ToString("N0")</td>
+                            <td>$@r.TotalPagado.ToString("N0")</td>
+                            <td style="color:#dc2626; font-weight:700">$@r.SaldoPendiente.ToString("N0")</td>
+                            <td><a href="/Reservas/Gestion/@r.ReservaId" class="btn btn-sm btn-primary">Pagar</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* === Últimos pagos === *@
+    <div class="card">
+        <h3>Últimos 50 Pagos</h3>
+        @if (_ultimosPagos.Count == 0)
+        {
+            <p class="text-muted">No hay pagos registrados en el período.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Reserva</th>
+                        <th>Monto</th>
+                        <th>Tipo</th>
+                        <th>Medio</th>
+                        <th>Estado</th>
+                        <th>Observaciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _ultimosPagos)
+                    {
+                        <tr>
+                            <td>@p.FechaPago.ToString("dd/MM/yyyy HH:mm")</td>
+                            <td><a href="/Reservas/Gestion/@p.ReservaId">#@p.ReservaId</a></td>
+                            <td>$@p.Monto.ToString("N0")</td>
+                            <td>@p.TipoPago</td>
+                            <td>@p.MedioPago</td>
+                            <td>@p.EstadoPago</td>
+                            <td>@(p.Observaciones ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private PagoObtenerReporteCajaUseCase ReporteCajaUseCase { get; set; } = default!;
+    [Inject] private PagoObtenerReservasConSaldoPendienteUseCase SaldoPendienteUseCase { get; set; } = default!;
+
+    private bool _cargando = true;
+    private List<PagoDto> _ultimosPagos = [];
+    private List<ReservaConSaldoDto> _reservasPendientes = [];
+    private int _cantidadPagosMes;
+    private decimal _recaudadoMes;
+    private decimal _totalPendiente;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hoy = DateTime.Today;
+        var inicioMes = new DateTime(hoy.Year, hoy.Month, 1);
+        var finMes = inicioMes.AddMonths(1);
+
+        var pagosTask = ReporteCajaUseCase.EjecutarAsync(inicioMes, finMes);
+        var pendientesTask = SaldoPendienteUseCase.EjecutarAsync();
+
+        await Task.WhenAll(pagosTask, pendientesTask);
+
+        var pagosMes = await pagosTask;
+        _cantidadPagosMes = pagosMes.Count;
+        _recaudadoMes = pagosMes.Sum(p => p.Monto);
+        _ultimosPagos = pagosMes.OrderByDescending(p => p.FechaPago).Take(50).ToList();
+
+        _reservasPendientes = await pendientesTask;
+        _totalPendiente = _reservasPendientes.Sum(r => r.SaldoPendiente);
+
+        _cargando = false;
+    }
+}

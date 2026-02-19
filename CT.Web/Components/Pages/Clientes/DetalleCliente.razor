@@ -1,0 +1,161 @@
+@page "/Clientes/{Id:int}"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Clientes
+@using CT.Application.UseCases.Reservas
+@using CT.Domain.Enums
+@using CT.Domain.Exceptions
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Detalle Cliente — CT</PageTitle>
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else if (_cliente == null)
+{
+    <div class="alert alert-danger">Cliente no encontrado.</div>
+}
+else
+{
+    <div class="page-header">
+        <h1>@_cliente.Nombre @_cliente.Apellido</h1>
+        <a href="/Clientes" class="btn btn-secondary">← Volver</a>
+    </div>
+
+    <div class="detalle-layout">
+        <div class="card">
+            <h3>Datos Personales</h3>
+            <div class="detalle-grid">
+                <div class="detalle-item">
+                    <span class="detalle-label">DNI</span>
+                    <span>@_cliente.DNI</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Teléfono</span>
+                    <span>@(_cliente.Telefono ?? "—")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Email</span>
+                    <span>@(_cliente.Email ?? "—")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Ciudad</span>
+                    <span>@(_cliente.Ciudad ?? "—")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Provincia</span>
+                    <span>@(_cliente.Provincia ?? "—")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">País</span>
+                    <span>@(_cliente.Pais ?? "—")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Registrado</span>
+                    <span>@_cliente.FechaCreacion.ToString("dd/MM/yyyy")</span>
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_cliente.Observaciones))
+            {
+                <div style="margin-top:1rem">
+                    <span class="detalle-label">Observaciones</span>
+                    <p style="white-space:pre-wrap">@_cliente.Observaciones</p>
+                </div>
+            }
+        </div>
+
+        <div class="card">
+            <h3>Estadísticas</h3>
+            <div class="detalle-grid">
+                <div class="detalle-item">
+                    <span class="detalle-label">Total reservas</span>
+                    <span class="card-value" style="font-size:1.5rem">@_reservas.Count</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Reservas activas</span>
+                    <span>@_reservas.Count(r => r.Estado is EstadoReserva.Pendiente or EstadoReserva.Confirmada)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* Historial de reservas *@
+    <div class="card" style="margin-top:1.5rem">
+        <h3>Historial de Reservas</h3>
+        @if (_reservas.Count == 0)
+        {
+            <p class="text-muted">Este cliente no tiene reservas.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Reserva</th>
+                        <th>Departamento</th>
+                        <th>Check-in</th>
+                        <th>Check-out</th>
+                        <th>Huéspedes</th>
+                        <th>Monto</th>
+                        <th>Estado</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _reservas.OrderByDescending(r => r.FechaInicio))
+                    {
+                        <tr>
+                            <td>#@r.ReservaId</td>
+                            <td>@r.DepartamentoNombre</td>
+                            <td>@r.FechaInicio.ToString("dd/MM/yyyy")</td>
+                            <td>@r.FechaFin.ToString("dd/MM/yyyy")</td>
+                            <td>@r.CantidadHuespedes</td>
+                            <td>$@r.MontoTotal.ToString("N0")</td>
+                            <td><span class="badge @ObtenerClaseBadge(r.Estado)">@r.Estado</span></td>
+                            <td><a href="/Reservas/Gestion/@r.ReservaId" class="btn btn-sm btn-secondary">Ver</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    [Inject] private ClienteObtenerDetalleUseCase DetalleUseCase { get; set; } = default!;
+    [Inject] private ReservaListarPorClienteUseCase ReservasClienteUseCase { get; set; } = default!;
+
+    private ClienteDto? _cliente;
+    private List<ReservaResumenDto> _reservas = [];
+    private bool _cargando = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _cliente = await DetalleUseCase.EjecutarAsync(Id);
+            _reservas = await ReservasClienteUseCase.EjecutarAsync(Id);
+        }
+        catch (EntityNotFoundException)
+        {
+            _cliente = null;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private static string ObtenerClaseBadge(EstadoReserva estado) => estado switch
+    {
+        EstadoReserva.Pendiente => "badge-pendiente",
+        EstadoReserva.Confirmada => "badge-confirmada",
+        EstadoReserva.Cancelada => "badge-cancelada",
+        EstadoReserva.Finalizada => "badge-finalizada",
+        _ => ""
+    };
+}

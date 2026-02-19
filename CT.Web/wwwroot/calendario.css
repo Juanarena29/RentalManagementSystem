@@ -1,0 +1,184 @@
+/* ===== Calendario Trimestral ===== */
+.calendario-wrapper {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    margin-bottom: 1.5rem;
+}
+
+.calendario-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.calendario-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1e293b;
+    text-transform: capitalize;
+}
+
+.calendario-scroll {
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.calendario-table {
+    border-collapse: collapse;
+    min-width: 100%;
+}
+
+.calendario-table th,
+.calendario-table td {
+    border: 1px solid #e2e8f0;
+    text-align: center;
+    font-size: 0.7rem;
+}
+
+.calendario-depto-col {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    background: #f8fafc;
+    min-width: 130px;
+    padding: 0.4rem 0.5rem;
+    font-weight: 600;
+    color: #475569;
+}
+
+.calendario-depto-nombre {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: #fff;
+    min-width: 130px;
+    padding: 0.4rem 0.5rem;
+    font-weight: 500;
+    color: #334155;
+    white-space: nowrap;
+}
+
+.calendario-dia-col {
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0.2rem;
+    background: #f8fafc;
+    color: #64748b;
+}
+
+.calendario-dia-num {
+    font-weight: 600;
+    font-size: 0.75rem;
+    color: #334155;
+}
+
+.calendario-dia-mes {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+}
+
+.calendario-finde {
+    background: #f1f5f9;
+}
+
+.calendario-hoy {
+    background: #dbeafe !important;
+}
+
+.calendario-hoy .calendario-dia-num {
+    color: #1d4ed8;
+}
+
+.calendario-celda {
+    min-width: 32px;
+    max-width: 32px;
+    height: 36px;
+    padding: 0;
+    cursor: default;
+    position: relative;
+}
+
+.calendario-libre {
+    background: #fff;
+}
+
+.calendario-libre:hover {
+    background: #f8fafc;
+}
+
+.calendario-ocupado {
+    cursor: pointer;
+    transition: filter 0.1s;
+}
+
+.calendario-ocupado:hover {
+    filter: brightness(0.9);
+}
+
+/* Estados */
+.estado-pendiente {
+    background-color: #93c5fd;
+}
+
+.estado-confirmada {
+    background-color: #86efac;
+}
+
+.estado-finalizada {
+    background-color: #cbd5e1;
+}
+
+/* Nombre dentro de la celda de inicio */
+.calendario-nombre {
+    position: absolute;
+    left: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.6rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.7);
+    white-space: nowrap;
+    overflow: visible;
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* Leyenda */
+.calendario-leyenda {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 0.75rem;
+    justify-content: center;
+}
+
+.leyenda-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.leyenda-color {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+.leyenda-pendiente {
+    background-color: #93c5fd;
+}
+
+.leyenda-confirmada {
+    background-color: #86efac;
+}
+
+.leyenda-finalizada {
+    background-color: #cbd5e1;
+}

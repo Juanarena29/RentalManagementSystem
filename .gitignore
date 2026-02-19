@@ -1,0 +1,61 @@
+## .NET / C# ##
+
+# Build results
+bin/
+obj/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.nuget.cache
+*.nuspec
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# Database files — NEVER commit these
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+
+# EF Core migrations snapshot can stay, but not the local DB
+# CT.Web/CTDb.db  ← excluded by *.db above
+
+# App secrets & connection strings with real credentials
+appsettings.Production.json
+secrets.json
+*.pfx
+*.p12
+
+# Test results
+TestResults/
+*.coverage
+*.coveragexml
+coverage/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

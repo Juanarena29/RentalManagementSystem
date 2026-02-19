@@ -1,0 +1,415 @@
+@page "/Reservas/Gestion/{Id:int}"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Reservas
+@using CT.Application.UseCases.Pagos
+@using CT.Domain.Enums
+@using CT.Domain.Exceptions
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Detalle Reserva — CT</PageTitle>
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else if (_reserva == null)
+{
+    <div class="alert alert-danger">Reserva no encontrada.</div>
+}
+else
+{
+    <div class="page-header">
+        <h1>Reserva #@_reserva.ReservaId</h1>
+        <a href="/Reservas/Gestion" class="btn btn-secondary">← Volver</a>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_mensaje))
+    {
+        <div class="alert @(_esError ? "alert-danger" : "alert-success")">@_mensaje</div>
+    }
+
+    <div class="detalle-layout">
+        @* === Info principal === *@
+        <div class="card">
+            <h3>Información de la Reserva</h3>
+            <div class="detalle-grid">
+                <div class="detalle-item">
+                    <span class="detalle-label">Estado</span>
+                    <span class="badge @ObtenerClaseBadge(_reserva.Estado)" style="font-size:0.9rem">@_reserva.Estado</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Departamento</span>
+                    <span>@_reserva.DepartamentoNombre</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Check-in</span>
+                    <span>@_reserva.FechaInicio.ToString("dd/MM/yyyy")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Check-out</span>
+                    <span>@_reserva.FechaFin.ToString("dd/MM/yyyy")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Noches</span>
+                    <span>@_reserva.CantidadNoches</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Huéspedes</span>
+                    <span>@_reserva.CantidadHuespedes</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Precio/Noche</span>
+                    <span>$@_reserva.PrecioPorNoche.ToString("N0")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Monto Total</span>
+                    <span><strong>$@_reserva.MontoTotal.ToString("N0")</strong></span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Total Pagado</span>
+                    <span>$@_reserva.TotalPagado.ToString("N0")</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Saldo Pendiente</span>
+                    <span style="color: @(_reserva.SaldoPendiente > 0 ? "#dc2626" : "#16a34a"); font-weight:700">
+                        $@_reserva.SaldoPendiente.ToString("N0")
+                    </span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Origen</span>
+                    <span>@_reserva.OrigenReserva</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Creada</span>
+                    <span>@_reserva.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</span>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_reserva.Observaciones))
+            {
+                <div style="margin-top:1rem">
+                    <span class="detalle-label">Observaciones</span>
+                    <p style="white-space:pre-wrap; margin-top:0.25rem">@_reserva.Observaciones</p>
+                </div>
+            }
+
+            @* === Acciones de estado === *@
+            @if (_reserva.Estado != EstadoReserva.Cancelada)
+            {
+                <hr />
+                <h4>Acciones</h4>
+                <div class="acciones-row">
+                    @if (_reserva.Estado == EstadoReserva.Pendiente)
+                    {
+                        <button class="btn btn-success" @onclick="OnConfirmarClick">Confirmar</button>
+                    }
+                    @if (_reserva.Estado == EstadoReserva.Confirmada)
+                    {
+                        <button class="btn btn-secondary" @onclick="OnFinalizarClick">Finalizar</button>
+                    }
+                    @if (_reserva.Estado is EstadoReserva.Pendiente or EstadoReserva.Confirmada)
+                    {
+                        <button class="btn btn-danger" @onclick="OnCancelarClick">Cancelar Reserva</button>
+                    }
+                </div>
+            }
+        </div>
+
+        @* === Cliente === *@
+        <div class="card">
+            <h3>Cliente</h3>
+            <div class="detalle-grid">
+                <div class="detalle-item">
+                    <span class="detalle-label">Nombre</span>
+                    <span>@_reserva.ClienteNombreCompleto</span>
+                </div>
+                <div class="detalle-item">
+                    <span class="detalle-label">Teléfono</span>
+                    <span>@(_reserva.ClienteTelefono ?? "—")</span>
+                </div>
+            </div>
+            <a href="/Clientes/@_reserva.ClienteId" class="btn btn-sm btn-secondary" style="margin-top:0.5rem">Ver
+                Cliente</a>
+            </div>
+        </div>
+
+        @* === Pagos === *@
+        <div class="card" style="margin-top:1.5rem">
+            <div class="page-header" style="margin-bottom:1rem">
+                <h3>Pagos</h3>
+                @if (_reserva.Estado != EstadoReserva.Cancelada)
+                {
+                    <button class="btn btn-sm btn-primary" @onclick="() => _mostrarFormPago = !_mostrarFormPago">
+                        @(_mostrarFormPago ? "Cancelar" : "+ Agregar Pago")
+                    </button>
+                }
+            </div>
+
+            @if (_mostrarFormPago)
+            {
+                <div class="pago-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Monto</label>
+                            <input type="number" class="form-control" step="0.01" min="0" @bind="_pagoDto.Monto" />
+                        </div>
+                        <div class="form-group">
+                            <label>Tipo de Pago</label>
+                            <select class="form-control" @bind="_pagoDto.TipoPago">
+                                @foreach (var tipo in Enum.GetValues<TipoPago>())
+                                {
+                                    <option value="@tipo">@tipo</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Medio de Pago</label>
+                            <select class="form-control" @bind="_pagoDto.MedioPago">
+                                @foreach (var medio in Enum.GetValues<MedioPago>())
+                                {
+                                    <option value="@medio">@medio</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Observaciones (opcional)</label>
+                        <input type="text" class="form-control" @bind="_pagoDto.Observaciones" />
+                    </div>
+                    <button class="btn btn-success" @onclick="RegistrarPago" disabled="@_guardandoPago">
+                        @(_guardandoPago ? "Registrando..." : "Registrar Pago")
+                    </button>
+                </div>
+            }
+
+            @if (_reserva.Pagos.Count == 0)
+            {
+                <p class="text-muted">No hay pagos registrados.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Monto</th>
+                            <th>Tipo</th>
+                            <th>Medio</th>
+                            <th>Estado</th>
+                            <th>Observaciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _reserva.Pagos)
+                        {
+                            <tr>
+                                <td>@p.FechaPago.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>$@p.Monto.ToString("N0")</td>
+                                <td>@p.TipoPago</td>
+                                <td>@p.MedioPago</td>
+                                <td>@p.EstadoPago</td>
+                                <td>@(p.Observaciones ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+
+    @* === Modal de confirmación === *@
+    @if (_mostrarModal)
+    {
+        <div class="modal-backdrop" @onclick="CerrarModal">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <div class="modal-header">@_modalTitulo</div>
+                <p>@_modalMensaje</p>
+
+                @if (_accionPendiente == "cancelar")
+                {
+                    <div class="form-group">
+                        <label>Motivo de cancelación (opcional)</label>
+                        <textarea class="form-control" rows="2" @bind="_motivoCancelacion"></textarea>
+                    </div>
+                }
+
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                    <button class="btn @_modalBtnClase" @onclick="EjecutarAccion" disabled="@_ejecutandoAccion">
+                        @(_ejecutandoAccion ? "Procesando..." : "Confirmar")
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    [Inject] private ReservaObtenerDetalleUseCase DetalleUseCase { get; set; } = default!;
+    [Inject] private ReservaConfirmarUseCase ConfirmarUseCase { get; set; } = default!;
+    [Inject] private ReservaCancelarUseCase CancelarUseCase { get; set; } = default!;
+    [Inject] private ReservaFinalizarUseCase FinalizarUseCase { get; set; } = default!;
+    [Inject] private PagoRegistrarUseCase PagoRegistrarUseCase { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private ReservaDetalleDto? _reserva;
+    private bool _cargando = true;
+    private string? _mensaje;
+    private bool _esError;
+
+    // Pago
+    private RegistrarPagoDto _pagoDto = new();
+    private bool _mostrarFormPago;
+    private bool _guardandoPago;
+
+    // Modal
+    private bool _mostrarModal;
+    private string _modalTitulo = string.Empty;
+    private string _modalMensaje = string.Empty;
+    private string _modalBtnClase = "btn-primary";
+    private string _accionPendiente = string.Empty;
+    private string? _motivoCancelacion;
+    private bool _ejecutandoAccion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarReserva();
+    }
+
+    private async Task CargarReserva()
+    {
+        _cargando = true;
+        try
+        {
+            _reserva = await DetalleUseCase.EjecutarAsync(Id);
+            _pagoDto = new RegistrarPagoDto { ReservaId = Id };
+        }
+        catch (EntityNotFoundException)
+        {
+            _reserva = null;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void MostrarConfirmacion(string accion)
+    {
+        _accionPendiente = accion;
+        _motivoCancelacion = null;
+
+        switch (accion)
+        {
+            case "confirmar":
+                _modalTitulo = "Confirmar Reserva";
+                _modalMensaje = $"¿Confirmar la reserva #{_reserva!.ReservaId} de {_reserva.ClienteNombreCompleto}?";
+                _modalBtnClase = "btn-success";
+                break;
+            case "finalizar":
+                _modalTitulo = "Finalizar Reserva";
+                _modalMensaje = $"¿Finalizar la reserva #{_reserva!.ReservaId}? Saldo pendiente: ${_reserva.SaldoPendiente:N0}";
+                _modalBtnClase = "btn-primary";
+                break;
+            case "cancelar":
+                _modalTitulo = "Cancelar Reserva";
+                _modalMensaje = $"¿Cancelar la reserva #{_reserva!.ReservaId} de {_reserva.ClienteNombreCompleto}? Esta acción no se puede deshacer.";
+                _modalBtnClase = "btn-danger";
+                break;
+        }
+
+        _mostrarModal = true;
+    }
+
+    private void CerrarModal() => _mostrarModal = false;
+
+    private async Task EjecutarAccion()
+    {
+        _ejecutandoAccion = true;
+        _mensaje = null;
+
+        try
+        {
+            switch (_accionPendiente)
+            {
+                case "confirmar":
+                    await ConfirmarUseCase.EjecutarAsync(Id);
+                    _mensaje = "Reserva confirmada exitosamente.";
+                    break;
+                case "finalizar":
+                    await FinalizarUseCase.EjecutarAsync(Id);
+                    _mensaje = "Reserva finalizada exitosamente.";
+                    break;
+                case "cancelar":
+                    await CancelarUseCase.EjecutarAsync(Id, _motivoCancelacion);
+                    _mensaje = "Reserva cancelada.";
+                    break;
+            }
+            _esError = false;
+            _mostrarModal = false;
+            await CargarReserva();
+        }
+        catch (Exception ex) when (ex is DomainInvalidOperationException or ReservaCanceladaException or
+PagoInsuficienteException)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+            _mostrarModal = false;
+        }
+        catch (Exception)
+        {
+            _mensaje = "Ocurrió un error inesperado.";
+            _esError = true;
+            _mostrarModal = false;
+        }
+        finally
+        {
+            _ejecutandoAccion = false;
+        }
+    }
+
+    private async Task RegistrarPago()
+    {
+        _mensaje = null;
+        _guardandoPago = true;
+
+        try
+        {
+            await PagoRegistrarUseCase.EjecutarAsync(_pagoDto);
+            _mensaje = "Pago registrado exitosamente.";
+            _esError = false;
+            _mostrarFormPago = false;
+            await CargarReserva();
+        }
+        catch (Exception ex) when (ex is ValidationException or ReservaCanceladaException or EntityNotFoundException or
+PagoInsuficienteException)
+        {
+            _mensaje = ex.Message;
+            _esError = true;
+        }
+        catch (Exception ex)
+        {
+            _mensaje = $"Error al registrar el pago: {ex.Message}";
+            _esError = true;
+        }
+        finally
+        {
+            _guardandoPago = false;
+        }
+    }
+
+    private void OnConfirmarClick() => MostrarConfirmacion("confirmar");
+    private void OnFinalizarClick() => MostrarConfirmacion("finalizar");
+    private void OnCancelarClick() => MostrarConfirmacion("cancelar");
+
+    private static string ObtenerClaseBadge(EstadoReserva estado) => estado switch
+    {
+        EstadoReserva.Pendiente => "badge-pendiente",
+        EstadoReserva.Confirmada => "badge-confirmada",
+        EstadoReserva.Cancelada => "badge-cancelada",
+        EstadoReserva.Finalizada => "badge-finalizada",
+        _ => ""
+    };
+}

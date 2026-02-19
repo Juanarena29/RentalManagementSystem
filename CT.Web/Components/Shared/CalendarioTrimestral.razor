@@ -1,0 +1,135 @@
+@using CT.Application.DTOs
+@using CT.Domain.Enums
+
+<div class="calendario-wrapper">
+    <div class="calendario-header">
+        <button class="btn btn-sm btn-secondary" @onclick="MesAnterior">◀</button>
+        <span class="calendario-title">@MesActual.ToString("MMMM yyyy") — @MesActual.AddMonths(2).ToString("MMMM            yyyy")</span>
+        <button class="btn btn-sm btn-secondary" @onclick="MesSiguiente">▶</button>
+    </div>
+
+    <div class="calendario-scroll">
+        <table class="calendario-table">
+            <thead>
+                <tr>
+                    <th class="calendario-depto-col">Departamento</th>
+                    @foreach (var dia in _dias)
+                    {
+                        <th                    class="calendario-dia-col @(dia.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ? "calendario-finde" : "") @(dia.Date == DateTime.Today ? "calendario-hoy" : "")">
+                            <div class="calendario-dia-num">@dia.Day</div>
+                            <div class="calendario-dia-mes">@dia.ToString("MMM")</div>
+                        </th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var depto in Departamentos)
+                {
+                    <tr>
+                        <td class="calendario-depto-nombre">@depto.Nombre</td>
+                        @foreach (var dia in _dias)
+                        {
+                            var reserva = ObtenerReservaEnDia(depto.DepartamentoId, dia);
+                            @if (reserva != null)
+                            {
+                                var esInicio = dia.Date == reserva.FechaInicio.Date;
+                                <td class="calendario-celda calendario-ocupado @ObtenerClaseEstado(reserva.Estado) @(esInicio ? "calendario-inicio" : "")"
+                                    title="@reserva.ClienteNombreCompleto — @reserva.FechaInicio.ToString("dd/MM") a @reserva.FechaFin.ToString("dd/MM")"
+                                    @onclick="() => OnReservaClick.InvokeAsync(reserva.ReservaId)">
+                                    @if (esInicio)
+                                    {
+                                        <span class="calendario-nombre">@reserva.ClienteNombreCompleto.Split(' ')[0]</span>
+                                    }
+                                </td>
+                            }
+                            else
+                            {
+                                <td class="calendario-celda calendario-libre"></td>
+                            }
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="calendario-leyenda">
+        <span class="leyenda-item"><span class="leyenda-color leyenda-pendiente"></span> Pendiente</span>
+        <span class="leyenda-item"><span class="leyenda-color leyenda-confirmada"></span> Confirmada</span>
+        <span class="leyenda-item"><span class="leyenda-color leyenda-finalizada"></span> Finalizada</span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<DepartamentoDto> Departamentos { get; set; } = [];
+    [Parameter] public List<CalendarioOcupacionDto> Reservas { get; set; } = [];
+    [Parameter] public EventCallback<int> OnReservaClick { get; set; }
+    [Parameter] public DateTime? MesInicial { get; set; }
+
+    private DateTime MesActual { get; set; }
+    private List<DateTime> _dias = [];
+
+    // Lookup rápido: (deptoId, fecha) -> reserva
+    private Dictionary<(int, DateTime), CalendarioOcupacionDto> _lookup = new();
+
+    protected override void OnInitialized()
+    {
+        MesActual = MesInicial ?? new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        RecalcularDias();
+    }
+
+    protected override void OnParametersSet()
+    {
+        ReconstruirLookup();
+    }
+
+    private void RecalcularDias()
+    {
+        _dias = [];
+        var inicio = MesActual;
+        var fin = MesActual.AddMonths(3);
+        for (var d = inicio; d < fin; d = d.AddDays(1))
+        {
+            _dias.Add(d);
+        }
+        ReconstruirLookup();
+    }
+
+    private void ReconstruirLookup()
+    {
+        _lookup.Clear();
+        foreach (var r in Reservas.Where(r => r.Estado != EstadoReserva.Cancelada))
+        {
+            for (var d = r.FechaInicio.Date; d < r.FechaFin.Date; d = d.AddDays(1))
+            {
+                _lookup[(r.DepartamentoId, d)] = r;
+            }
+        }
+    }
+
+    private CalendarioOcupacionDto? ObtenerReservaEnDia(int deptoId, DateTime dia)
+    {
+        _lookup.TryGetValue((deptoId, dia.Date), out var reserva);
+        return reserva;
+    }
+
+    private static string ObtenerClaseEstado(EstadoReserva estado) => estado switch
+    {
+        EstadoReserva.Pendiente => "estado-pendiente",
+        EstadoReserva.Confirmada => "estado-confirmada",
+        EstadoReserva.Finalizada => "estado-finalizada",
+        _ => ""
+    };
+
+    private void MesAnterior()
+    {
+        MesActual = MesActual.AddMonths(-1);
+        RecalcularDias();
+    }
+
+    private void MesSiguiente()
+    {
+        MesActual = MesActual.AddMonths(1);
+        RecalcularDias();
+    }
+}

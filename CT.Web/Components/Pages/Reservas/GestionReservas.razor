@@ -1,0 +1,128 @@
+@page "/Reservas/Gestion"
+@using CT.Application.DTOs
+@using CT.Application.UseCases.Departamentos
+@using CT.Application.UseCases.Reservas
+@using CT.Domain.Enums
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
+
+<PageTitle>Gestionar Reservas — CT</PageTitle>
+
+<div class="page-header">
+    <h1>Gestionar Reservas</h1>
+    <a href="/Reservas/Crear" class="btn btn-primary">+ Crear Reserva</a>
+</div>
+
+@if (_cargando)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <CalendarioTrimestral        Departamentos="_departamentos"        Reservas="_calendarioReservas"        OnReservaClick="IrADetalle" />
+
+    <div class="card" style="margin-top: 1.5rem;">
+        <h3>Últimas 20 Reservas</h3>
+
+        @if (_ultimasReservas.Count == 0)
+        {
+            <p class="text-muted">No hay reservas registradas.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Departamento</th>
+                        <th>Inicio</th>
+                        <th>Noches</th>
+                        <th>Monto</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _ultimasReservas)
+                    {
+                        var noches = (r.FechaFin - r.FechaInicio).Days;
+                        <tr>
+                            <td>@r.ClienteNombreCompleto</td>
+                            <td>@r.DepartamentoNombre</td>
+                            <td>@r.FechaInicio.ToString("dd/MM/yyyy")</td>
+                            <td>@noches</td>
+                            <td>$@r.MontoTotal.ToString("N0")</td>
+                            <td><span class="badge @ObtenerClaseBadge(r.Estado)">@r.Estado</span></td>
+                            <td>
+                                <a href="/Reservas/Gestion/@r.ReservaId" class="btn btn-sm btn-secondary">Ver</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private DepartamentoListarUseCase ListarDeptosUseCase { get; set; } = default!;
+    [Inject] private ObtenerCalendarioOcupacionUseCase CalendarioUseCase { get; set; } = default!;
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private bool _cargando = true;
+    private List<DepartamentoDto> _departamentos = [];
+    private List<CalendarioOcupacionDto> _calendarioReservas = [];
+    private List<ReservaResumenDto> _ultimasReservas = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hoy = DateTime.Today;
+        var inicioMes = new DateTime(hoy.Year, hoy.Month, 1);
+        var finTrimestre = inicioMes.AddMonths(3);
+
+        var deptosTask = ListarDeptosUseCase.EjecutarAsync();
+        var calendarioTask = CalendarioUseCase.EjecutarAsync(inicioMes, finTrimestre);
+
+        await Task.WhenAll(deptosTask, calendarioTask);
+
+        _departamentos = await deptosTask;
+        _calendarioReservas = await calendarioTask;
+
+        // Últimas 20 reservas ordenadas por fecha inicio descendente
+        // Usamos las del calendario como fuente (ya tienen la info del rango visible)
+        _ultimasReservas = _calendarioReservas
+            .Where(r => r.Estado != EstadoReserva.Cancelada)
+            .OrderByDescending(r => r.FechaInicio)
+            .Take(20)
+            .Select(r => new ReservaResumenDto
+            {
+                ReservaId = r.ReservaId,
+                DepartamentoId = r.DepartamentoId,
+                DepartamentoNombre = r.DepartamentoNombre,
+                ClienteNombreCompleto = r.ClienteNombreCompleto,
+                FechaInicio = r.FechaInicio,
+                FechaFin = r.FechaFin,
+                CantidadHuespedes = r.CantidadHuespedes,
+                Estado = r.Estado,
+                MontoTotal = 0 // No disponible en CalendarioOcupacionDto
+            })
+            .ToList();
+
+        _cargando = false;
+    }
+
+    private void IrADetalle(int reservaId)
+    {
+        Navigation.NavigateTo($"/Reservas/Gestion/{reservaId}");
+    }
+
+    private static string ObtenerClaseBadge(EstadoReserva estado) => estado switch
+    {
+        EstadoReserva.Pendiente => "badge-pendiente",
+        EstadoReserva.Confirmada => "badge-confirmada",
+        EstadoReserva.Cancelada => "badge-cancelada",
+        EstadoReserva.Finalizada => "badge-finalizada",
+        _ => ""
+    };
+}
