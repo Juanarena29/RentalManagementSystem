@@ -3,6 +3,7 @@ using CT.Application.UseCases.Users;
 using CT.Domain.Exceptions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace CT.Web.Controllers;
@@ -19,6 +20,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> Login([FromForm] string email, [FromForm] string password)
     {
         try

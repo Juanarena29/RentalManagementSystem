@@ -12,6 +12,8 @@ Full-stack web application for managing a tourist complex: bookings, guests, apa
 - Occupancy statistics: occupancy rate, revenue, today's check-ins/check-outs
 - Guest and apartment management
 - Cookie-based authentication (PBKDF2 + timing-safe verification)
+- Rate limiting on login endpoint to prevent brute-force attacks
+- Global exception handling middleware with domain-aware HTTP status mapping
 - User administration panel with strong password policy
 
 ---
@@ -56,7 +58,7 @@ CT.Web
 ### Applied patterns
 
 - **Repository Pattern** — `IRepositorioDepartamento`, `IRepositorioReserva`, etc.
-- **Unit of Work** — atomic transactions in `PagoRegistrarUseCase`
+- **Unit of Work** — atomic transactions in `PagoRegistrarUseCase` and `ReservaAltaUseCase`
 - **Use Case Pattern** — each business operation is an independent class
 - **Fluent API (EF Core)** — entity configurations separated by file
 - **DTO Pattern** — clean separation between domain model and transfer model
@@ -88,7 +90,8 @@ CT/
 │   └── Services/          # PasswordHasher (PBKDF2), UnitOfWork
 │
 ├── CT.Web/
-│   ├── Controllers/       # AuthController (login/logout)
+│   ├── Controllers/       # AuthController (login/logout + rate limiting)
+│   ├── Middleware/         # GlobalExceptionMiddleware
 │   ├── Services/          # CustomAuthStateProvider
 │   ├── Components/        # 20 Blazor components
 │   │   ├── Pages/         # Home, Bookings, Guests, Apartments, Payments, Users
@@ -109,8 +112,11 @@ CT/
 - **Timing-safe comparison**: `CryptographicOperations.FixedTimeEquals` to prevent timing attacks.
 - **Cookie auth**: `HttpOnly`, `SameSite=Strict`, 7-day sliding expiration.
 - **User enumeration prevention**: identical error message for wrong email and wrong password.
+- **Rate limiting**: Fixed-window limiter on `/api/auth/login` (5 requests/minute) to prevent brute-force attacks.
+- **Global exception middleware**: Catches all domain exceptions and maps them to appropriate HTTP status codes (400, 401, 404, 409), preventing stack trace leakage to clients.
 - **Password policy**: minimum 8 characters, at least one uppercase letter and one digit.
 - **Unique indexes on DNI and Email** to prevent duplicates at the database level.
+- **ACID transactions**: Overlap check + booking creation wrapped in a single transaction in `ReservaAltaUseCase` to prevent race conditions.
 
 ---
 
@@ -191,11 +197,12 @@ Direct readability when querying the database. The space overhead is negligible 
 
 ## Planned Improvements
 
-- [ ] Global exception handling middleware
+- [x] Global exception handling middleware
+- [x] Rate limiting on the login endpoint
+- [x] ACID transaction in `ReservaAltaUseCase` (overlap check + creation)
 - [ ] `ILogger` logging in critical use cases
 - [ ] Pagination on list endpoints
 - [ ] Granular roles and authorization
-- [ ] Rate limiting on the login endpoint
 - [ ] Integration tests with SQL Server in-memory / SQLite in-memory
 - [ ] Extension methods for dependency registration in `Program.cs`
 

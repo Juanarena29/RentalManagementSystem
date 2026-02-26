@@ -15,6 +15,7 @@ public class ReservaAltaUseCaseTests
     private readonly Mock<IRepositorioReserva> _repoReserva = new();
     private readonly Mock<IRepositorioDepartamento> _repoDpto = new();
     private readonly Mock<IRepositorioCliente> _repoCliente = new();
+    private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly ReservaValidator _validador = new();
     private readonly ReservaAltaUseCase _useCase;
 
@@ -30,7 +31,7 @@ public class ReservaAltaUseCaseTests
     public ReservaAltaUseCaseTests()
     {
         _useCase = new ReservaAltaUseCase(
-            _repoReserva.Object, _repoDpto.Object, _repoCliente.Object, _validador);
+            _repoReserva.Object, _repoDpto.Object, _repoCliente.Object, _unitOfWork.Object, _validador);
     }
 
     private CrearReservaDto CrearDtoValido() => new()

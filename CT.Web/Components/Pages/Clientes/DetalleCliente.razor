@@ -35,6 +35,15 @@ else
                 <div class="detalle-item">
                     <span class="detalle-label">Teléfono</span>
                     <span>@(_cliente.Telefono ?? "—")</span>
+                    @if (!string.IsNullOrWhiteSpace(_cliente.Telefono))
+                    {
+                        <a href="https://wa.me/@LimpiarTelefono(_cliente.Telefono)"
+                           target="_blank"
+                           class="btn btn-sm btn-secondary"
+                           style="margin-left:0.5rem">
+                            Dirigir a WhatsApp
+                        </a>
+                    }
                 </div>
                 <div class="detalle-item">
                     <span class="detalle-label">Email</span>
@@ -158,4 +167,7 @@ else
         EstadoReserva.Finalizada => "badge-finalizada",
         _ => ""
     };
+
+    private static string LimpiarTelefono(string telefono) =>
+        new(telefono.Where(char.IsDigit).ToArray());
 }

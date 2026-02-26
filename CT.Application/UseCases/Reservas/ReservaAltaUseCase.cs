@@ -12,17 +12,20 @@ public class ReservaAltaUseCase
     private readonly IRepositorioReserva _repositorio;
     private readonly IRepositorioDepartamento _repositorioDepartamento;
     private readonly IRepositorioCliente _repositorioCliente;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ReservaValidator _validador;
 
     public ReservaAltaUseCase(
         IRepositorioReserva repositorio,
         IRepositorioDepartamento repositorioDepartamento,
         IRepositorioCliente repositorioCliente,
+        IUnitOfWork unitOfWork,
         ReservaValidator validador)
     {
         _repositorio = repositorio;
         _repositorioDepartamento = repositorioDepartamento;
         _repositorioCliente = repositorioCliente;
+        _unitOfWork = unitOfWork;
         _validador = validador;
     }
 
@@ -48,33 +51,44 @@ public class ReservaAltaUseCase
             throw new CapacidadExcedidaException(
                 $"La cantidad de huéspedes ({dto.CantidadHuespedes}) supera la capacidad máxima del departamento ({departamento.CapacidadMaxima}).");
 
-        // 5. Validar que no hay solapamiento con otras reservas
-        if (await _repositorio.HaySolapamientoAsync(dto.DepartamentoId, dto.FechaInicio, dto.FechaFin))
-            throw new ReservaSuperpuestaException("Existe solapamiento de reservas en esas fechas.");
-
-        // 6. Calcular montos
-        int cantidadNoches = (dto.FechaFin.Date - dto.FechaInicio.Date).Days;
-        decimal montoTotal = cantidadNoches * departamento.PrecioPorNoche;
-
-        // 7. Crear entidad Reserva (pagos se registran aparte con PagoRegistrarUseCase)
-        var reserva = new Reserva
+        // 5. Verificar solapamiento y crear reserva en una transacción atómica
+        await _unitOfWork.BeginTransactionAsync();
+        try
         {
-            DepartamentoId = dto.DepartamentoId,
-            ClienteId = dto.ClienteId,
-            FechaInicio = dto.FechaInicio.Date,
-            FechaFin = dto.FechaFin.Date,
-            CantidadHuespedes = dto.CantidadHuespedes,
-            Estado = EstadoReserva.Pendiente,
-            PrecioPorNoche = departamento.PrecioPorNoche,
-            MontoTotal = montoTotal,
-            MontoSenia = 0,
-            SaldoPendiente = montoTotal,
-            OrigenReserva = dto.OrigenReserva,
-            Observaciones = dto.Observaciones?.Trim(),
-            FechaCreacion = DateTime.UtcNow
-        };
+            if (await _repositorio.HaySolapamientoAsync(dto.DepartamentoId, dto.FechaInicio, dto.FechaFin))
+                throw new ReservaSuperpuestaException("Existe solapamiento de reservas en esas fechas.");
 
-        // 8. Persistir reserva
-        await _repositorio.AgregarAsync(reserva);
+            // 6. Calcular montos
+            int cantidadNoches = (dto.FechaFin.Date - dto.FechaInicio.Date).Days;
+            decimal montoTotal = cantidadNoches * departamento.PrecioPorNoche;
+
+            // 7. Crear entidad Reserva (pagos se registran aparte con PagoRegistrarUseCase)
+            var reserva = new Reserva
+            {
+                DepartamentoId = dto.DepartamentoId,
+                ClienteId = dto.ClienteId,
+                FechaInicio = dto.FechaInicio.Date,
+                FechaFin = dto.FechaFin.Date,
+                CantidadHuespedes = dto.CantidadHuespedes,
+                Estado = EstadoReserva.Pendiente,
+                PrecioPorNoche = departamento.PrecioPorNoche,
+                MontoTotal = montoTotal,
+                MontoSenia = 0,
+                SaldoPendiente = montoTotal,
+                OrigenReserva = dto.OrigenReserva,
+                Observaciones = dto.Observaciones?.Trim(),
+                FechaCreacion = DateTime.UtcNow
+            };
+
+            // 8. Persistir reserva
+            await _repositorio.AgregarAsync(reserva);
+
+            await _unitOfWork.CommitAsync();
+        }
+        catch
+        {
+            await _unitOfWork.RollbackAsync();
+            throw;
+        }
     }
 }
