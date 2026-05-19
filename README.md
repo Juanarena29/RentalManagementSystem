@@ -149,8 +149,8 @@ Stack: **xUnit** + **Moq** + **FluentAssertions** + **coverlet**
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Juanarena29/CT.git
-cd CT
+git clone https://github.com/Juanarena29/RentalManagementSystem
+cd RentalManagementSystem
 
 # 2. Set your connection string in CT.Web/appsettings.Development.json
 # (defaults to SQLite locally; replace with your SQL Server connection string for production)
